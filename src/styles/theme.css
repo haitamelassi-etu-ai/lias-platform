@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: var(--brand-primary); /* Midnight Blue */
+  --color-brand-secondary: var(--brand-secondary); /* Mineral Cyan */
+  --color-brand-tertiary: var(--brand-tertiary); /* Light Sand */
+  --color-brand-accent: var(--brand-accent); /* Coral */
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+
+  --font-sans: "Space Grotesk", sans-serif;
+  --font-serif: "Source Serif 4", serif;
+}
+
+@layer base {
+  :root {
+    --brand-primary: #0F172A; /* Midnight Blue */
+    --brand-secondary: #0891B2; /* Mineral Cyan */
+    --brand-tertiary: #F8F5F2; /* Light Sand */
+    --brand-accent: #FF7F50; /* Coral */
+    
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --bg-primary: #F8F5F2;
+    --bg-secondary: #FFFFFF;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    color: var(--brand-primary);
+  }
+  
+  p {
+    font-family: var(--font-serif);
+  }
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.font-sans {
+  font-family: var(--font-sans);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
