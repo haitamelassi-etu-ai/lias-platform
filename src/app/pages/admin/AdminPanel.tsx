@@ -12,6 +12,8 @@ import {
   LayoutDashboard,
   Link as LinkIcon,
   Newspaper,
+  Power,
+  PowerOff,
   PlusCircle,
   RefreshCw,
   Save,
@@ -35,6 +37,7 @@ import {
   listModerationQueue,
   updateAdminUserOrcid,
   updateUserRole,
+  updateUserStatus,
   type AdminUser,
   type LabEvent,
   type NewsItem,
@@ -69,6 +72,7 @@ export function AdminPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | Role>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [orcidEditUserId, setOrcidEditUserId] = useState<number | null>(null);
   const [orcidDraft, setOrcidDraft] = useState("");
   const [axisErrors, setAxisErrors] = useState<Record<string, string>>({});
@@ -173,6 +177,36 @@ export function AdminPanel() {
           await loadAdminData();
         } catch (err) {
           setError(err instanceof ApiError ? err.message : "Impossible de mettre à jour le rôle");
+        }
+      },
+    });
+  };
+
+  const handleStatusChange = (account: AdminUser) => {
+    if (!token) return;
+    if (account.id === user?.id) {
+      setNotice("Votre propre compte ne peut pas être désactivé depuis cette page.");
+      return;
+    }
+
+    const nextStatus = !account.is_active;
+    setConfirmAction({
+      title: nextStatus ? "Réactiver le compte" : "Désactiver le compte",
+      description: nextStatus
+        ? `Le compte de ${account.full_name} pourra de nouveau se connecter au portail LIAS.`
+        : `Le compte de ${account.full_name} ne pourra plus se connecter tant qu'il n'est pas réactivé.`,
+      confirmLabel: nextStatus ? "Réactiver" : "Désactiver",
+      tone: nextStatus ? "primary" : "danger",
+      onConfirm: async () => {
+        setError(null);
+        setNotice(null);
+        try {
+          await updateUserStatus(token, account.id, nextStatus);
+          setNotice(nextStatus ? "Compte utilisateur réactivé." : "Compte utilisateur désactivé.");
+          setConfirmAction(null);
+          await loadAdminData();
+        } catch (err) {
+          setError(err instanceof ApiError ? err.message : "Impossible de modifier le statut du compte");
         }
       },
     });
@@ -322,6 +356,8 @@ export function AdminPanel() {
     }
   };
 
+  const activeUserCount = users.filter((account) => account.is_active).length;
+  const inactiveUserCount = users.length - activeUserCount;
   const adminCount = users.filter((account) => account.role === "admin").length;
   const memberCount = users.length - adminCount;
   const upcomingEventsCount = events.filter((event) => event.lifecycle_status === "upcoming").length;
@@ -333,11 +369,14 @@ export function AdminPanel() {
   const normalizedUserSearch = userSearch.trim().toLowerCase();
   const filteredUsers = users.filter((account) => {
     const matchesRole = roleFilter === "all" || account.role === roleFilter;
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" ? account.is_active : !account.is_active);
     const matchesSearch =
       !normalizedUserSearch ||
       account.full_name.toLowerCase().includes(normalizedUserSearch) ||
       account.email.toLowerCase().includes(normalizedUserSearch);
-    return matchesRole && matchesSearch;
+    return matchesRole && matchesStatus && matchesSearch;
   });
 
   const kpis = [
@@ -590,6 +629,10 @@ export function AdminPanel() {
               <div className="flex gap-2 text-xs font-bold">
                 <span className="rounded-full bg-brand-primary/10 px-3 py-1 text-brand-primary">{adminCount} admins</span>
                 <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-600">{memberCount} membres</span>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">{activeUserCount} actifs</span>
+                {inactiveUserCount > 0 && (
+                  <span className="rounded-full bg-red-100 px-3 py-1 text-red-700">{inactiveUserCount} inactifs</span>
+                )}
               </div>
             </div>
             <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_auto]">
@@ -602,30 +645,57 @@ export function AdminPanel() {
                   className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm text-brand-primary outline-none transition-colors focus:border-brand-secondary"
                 />
               </label>
-              <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-                {[
-                  ["all", "Tous"],
-                  ["admin", "Admins"],
-                  ["member", "Membres"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setRoleFilter(value as "all" | Role)}
-                    className={`rounded-md px-3 py-1.5 text-sm font-bold transition-colors ${
-                      roleFilter === value
-                        ? "bg-white text-brand-secondary shadow-sm"
-                        : "text-text-secondary hover:text-brand-primary"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <div className="flex flex-wrap gap-2">
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                  {[
+                    ["all", "Tous"],
+                    ["admin", "Admins"],
+                    ["member", "Membres"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setRoleFilter(value as "all" | Role)}
+                      className={`rounded-md px-3 py-1.5 text-sm font-bold transition-colors ${
+                        roleFilter === value
+                          ? "bg-white text-brand-secondary shadow-sm"
+                          : "text-text-secondary hover:text-brand-primary"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                  {[
+                    ["all", "Tous"],
+                    ["active", "Actifs"],
+                    ["inactive", "Inactifs"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setStatusFilter(value as "all" | "active" | "inactive")}
+                      className={`rounded-md px-3 py-1.5 text-sm font-bold transition-colors ${
+                        statusFilter === value
+                          ? "bg-white text-brand-secondary shadow-sm"
+                          : "text-text-secondary hover:text-brand-primary"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="max-h-[560px] overflow-y-auto rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
               {filteredUsers.map((account) => (
-                <div key={account.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors hover:bg-brand-tertiary/40">
+                <div
+                  key={account.id}
+                  className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors hover:bg-brand-tertiary/40 ${
+                    account.is_active ? "" : "bg-gray-50/80"
+                  }`}
+                >
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-primary/10 text-sm font-bold text-brand-primary">
                       {account.full_name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
@@ -683,6 +753,9 @@ export function AdminPanel() {
                       </div>
                     )}
                     <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                    <span className={`text-xs uppercase tracking-wider font-bold px-2 py-1 rounded-full ${account.is_active ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                      {account.is_active ? "Actif" : "Inactif"}
+                    </span>
                     <span className={`text-xs uppercase tracking-wider font-bold px-2 py-1 rounded-full ${account.role === "admin" ? "bg-brand-primary/10 text-brand-primary" : "bg-gray-100 text-gray-600"}`}>{account.role}</span>
                     {account.id === user?.id && (
                       <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase tracking-wider text-emerald-700">Compte actuel</span>
@@ -711,6 +784,19 @@ export function AdminPanel() {
                       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/5 transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
                     >
                       → {account.role === "admin" ? "Membre" : "Admin"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStatusChange(account)}
+                      disabled={account.id === user?.id}
+                      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent ${
+                        account.is_active
+                          ? "border-red-200 text-red-700 hover:bg-red-50"
+                          : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      }`}
+                    >
+                      {account.is_active ? <PowerOff size={14} /> : <Power size={14} />}
+                      {account.is_active ? "Désactiver" : "Réactiver"}
                     </button>
                   </div>
                   </div>

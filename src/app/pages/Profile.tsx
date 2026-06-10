@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  KeyRound,
   Link as LinkIcon,
   Mail,
   RefreshCw,
@@ -18,6 +19,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import {
   ApiError,
+  changePassword,
   getMyProfile,
   importOrcidPublications,
   linkOrcid,
@@ -90,6 +92,10 @@ export function Profile() {
   const [isPreviewingOrcid, setIsPreviewingOrcid] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -254,6 +260,43 @@ export function Profile() {
       setError(err instanceof ApiError ? err.message : "Impossible d'importer depuis ORCID. Vérifiez votre connexion.");
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handlePasswordChange = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!token) return;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError("Veuillez remplir les trois champs du mot de passe.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("Le nouveau mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("La confirmation ne correspond pas au nouveau mot de passe.");
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setError("Le nouveau mot de passe doit être différent du mot de passe actuel.");
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setIsChangingPassword(true);
+    try {
+      const result = await changePassword(token, currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setNotice(result.message);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Impossible de modifier le mot de passe");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -576,6 +619,68 @@ export function Profile() {
                 <StatusLine done={Boolean(externalLinks.trim())} label="Liens externes" />
                 <StatusLine done={isOrcidLinked} label="ORCID lie" />
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-brand-primary/10 bg-white p-6 shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-primary/10 text-brand-primary">
+                  <KeyRound size={20} />
+                </span>
+                <div>
+                  <h2 className="text-lg font-bold text-brand-primary">Sécurité du compte</h2>
+                  <p className="mt-1 text-sm text-text-secondary font-serif">
+                    Modifiez votre mot de passe sans quitter votre espace membre.
+                  </p>
+                </div>
+              </div>
+              <form onSubmit={handlePasswordChange} className="mt-5 space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-brand-primary">
+                    Mot de passe actuel
+                  </label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    autoComplete="current-password"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition-colors focus:border-brand-secondary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-brand-primary">
+                    Nouveau mot de passe
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    autoComplete="new-password"
+                    minLength={8}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition-colors focus:border-brand-secondary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-brand-primary">
+                    Confirmer le nouveau mot de passe
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                    minLength={8}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none transition-colors focus:border-brand-secondary"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isChangingPassword}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <KeyRound size={16} />
+                  {isChangingPassword ? "Modification..." : "Changer le mot de passe"}
+                </button>
+              </form>
             </section>
 
             <section className="rounded-2xl border border-brand-primary/10 bg-brand-primary p-6 text-white shadow-sm">

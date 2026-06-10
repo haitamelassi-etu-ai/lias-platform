@@ -51,6 +51,7 @@ def _serialize_admin_user(user: models.User, profile: models.MemberProfile | Non
         email=user.email,
         full_name=user.full_name,
         role=user.role,
+        is_active=user.is_active,
         orcid_name_locked=user.orcid_name_locked,
         orcid_id=(profile.orcid_id if profile else None) or user.orcid_sub,
     )
@@ -366,7 +367,6 @@ def list_users_admin(
 ) -> list[schemas.AdminUserRead]:
     users = db.scalars(
         select(models.User)
-        .where(models.User.is_active.is_(True))
         .order_by(models.User.full_name)
     ).all()
     profiles = db.scalars(
@@ -388,6 +388,28 @@ def change_user_role(
     user = db.get(models.User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Vous ne pouvez pas modifier votre propre rôle",
+        )
+
+    if (
+        user.role == models.UserRole.ADMIN
+        and role != models.UserRole.ADMIN
+        and user.is_active
+    ):
+        active_admin_count = db.scalar(
+            select(func.count(models.User.id)).where(
+                models.User.role == models.UserRole.ADMIN,
+                models.User.is_active.is_(True),
+            )
+        ) or 0
+        if active_admin_count <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Le dernier administrateur actif ne peut pas être rétrogradé",
+            )
 
     previous_role = user.role
     user.role = role
@@ -407,6 +429,59 @@ def change_user_role(
     db.commit()
     db.refresh(user)
     return schemas.UserPublic.model_validate(user)
+
+
+@router.patch("/admin/users/{user_id}/status", response_model=schemas.AdminUserRead)
+def change_user_status(
+    user_id: int,
+    is_active: bool,
+    current_admin: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> schemas.AdminUserRead:
+    user = db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user.id == current_admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Vous ne pouvez pas désactiver votre propre compte",
+        )
+
+    if user.role == models.UserRole.ADMIN and user.is_active and not is_active:
+        active_admin_count = db.scalar(
+            select(func.count(models.User.id)).where(
+                models.User.role == models.UserRole.ADMIN,
+                models.User.is_active.is_(True),
+            )
+        ) or 0
+        if active_admin_count <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Le dernier administrateur actif ne peut pas être désactivé",
+            )
+
+    previous_status = user.is_active
+    user.is_active = is_active
+    write_audit_log(
+        db,
+        current_admin,
+        action="user.activated" if is_active else "user.deactivated",
+        entity_type="user",
+        entity_id=user.id,
+        entity_title=user.full_name,
+        details={
+            "email": user.email,
+            "previous_status": previous_status,
+            "new_status": is_active,
+        },
+    )
+    db.commit()
+    db.refresh(user)
+
+    profile = db.scalar(
+        select(models.MemberProfile).where(models.MemberProfile.user_id == user.id)
+    )
+    return _serialize_admin_user(user, profile)
 
 
 @router.patch("/admin/users/{user_id}/orcid", response_model=schemas.AdminUserRead)

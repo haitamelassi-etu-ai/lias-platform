@@ -18,6 +18,7 @@ class UserPublic(BaseModel):
     email: EmailStr
     full_name: str
     role: UserRole
+    is_active: bool = True
     orcid_name_locked: bool = False
 
 
@@ -66,6 +67,11 @@ class PasswordResetResponse(BaseModel):
 
 class PasswordResetConfirm(BaseModel):
     token: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
 
 

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..core.audit import write_audit_log
 from ..core.config import settings
 from ..core.database import get_db
 from ..core.deps import get_current_active_user
@@ -201,6 +202,48 @@ def confirm_password_reset(
     db.commit()
 
     return {"message": "Mot de passe mis à jour avec succès"}
+
+
+@router.post("/change-password")
+def change_password(
+    payload: schemas.PasswordChangeRequest,
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le mot de passe actuel est incorrect",
+        )
+
+    if verify_password(payload.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le nouveau mot de passe doit être différent du mot de passe actuel",
+        )
+
+    now = datetime.utcnow()
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    for reset_token in db.scalars(
+        select(models.PasswordResetToken).where(
+            models.PasswordResetToken.user_id == current_user.id,
+            models.PasswordResetToken.used_at.is_(None),
+        )
+    ):
+        reset_token.used_at = now
+
+    write_audit_log(
+        db,
+        current_user,
+        action="user.password_changed",
+        entity_type="user",
+        entity_id=current_user.id,
+        entity_title=current_user.full_name,
+        details={"email": current_user.email},
+    )
+    db.commit()
+
+    return {"message": "Mot de passe modifié avec succès"}
 
 
 @router.get("/me", response_model=schemas.UserPublic)

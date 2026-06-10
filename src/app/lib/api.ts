@@ -11,6 +11,7 @@ export interface User {
   email: string;
   full_name: string;
   role: Role;
+  is_active: boolean;
   orcid_name_locked: boolean;
 }
 
@@ -333,6 +334,24 @@ export async function confirmPasswordReset(
     method: "POST",
     body: JSON.stringify({ token, new_password: newPassword }),
   });
+}
+
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  return request<{ message: string }>(
+    "/auth/change-password",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    },
+    token,
+  );
 }
 
 export async function register(
@@ -961,6 +980,18 @@ export async function updateUserRole(
   role: Role,
 ): Promise<User> {
   return request<User>(`/members/admin/users/${userId}/role?role=${role}`, { method: "PATCH" }, token);
+}
+
+export async function updateUserStatus(
+  token: string,
+  userId: number,
+  isActive: boolean,
+): Promise<AdminUser> {
+  return request<AdminUser>(
+    `/members/admin/users/${userId}/status?is_active=${isActive}`,
+    { method: "PATCH" },
+    token,
+  );
 }
 
 export async function updateAdminUserOrcid(
