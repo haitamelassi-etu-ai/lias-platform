@@ -18,6 +18,22 @@ class UserPublic(BaseModel):
     email: EmailStr
     full_name: str
     role: UserRole
+    orcid_name_locked: bool = False
+
+
+class AdminUserRead(UserPublic):
+    orcid_id: str | None = None
+
+
+class AdminUserOrcidUpdate(BaseModel):
+    orcid_id: str | None = Field(default=None, max_length=32)
+
+
+class OrcidCompleteSetupRequest(BaseModel):
+    orcid_id: str = Field(min_length=15, max_length=32)
+    orcid_name: str = Field(min_length=2, max_length=255)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
 
 
 class RegisterRequest(BaseModel):
@@ -25,10 +41,11 @@ class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=255)
     password: str = Field(min_length=8, max_length=128)
     role: UserRole = UserRole.MEMBER
+    orcid_id: str | None = Field(default=None, max_length=32)
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    identifier: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=128)
 
 
@@ -36,6 +53,36 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserPublic
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetResponse(BaseModel):
+    message: str
+    reset_url: str | None = None
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class AuditLogRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    actor_id: int
+    actor_email: EmailStr
+    actor_name: str
+    actor_role: str
+    action: str
+    entity_type: str
+    entity_id: int | None
+    entity_title: str | None
+    details: str | None
+    created_at: datetime
 
 
 class ResearchAxisBase(BaseModel):
@@ -91,6 +138,7 @@ class MemberProfileRead(BaseModel):
     laboratory: str
     research_axis_id: int | None
     research_axis_title: str | None
+    publication_count: int = 0
     updated_at: datetime
 
 
@@ -131,12 +179,45 @@ class PublicationUpdate(BaseModel):
 class PublicationRead(PublicationBase):
     id: int
     source: str
+    is_archived: bool = False
     validation_status: ValidationStatus
     owner_id: int
     owner_name: str
     axis_title: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class PublicationEditRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=500)
+    authors: str | None = Field(default=None, min_length=2)
+    publication_type: str | None = Field(default=None, min_length=2, max_length=120)
+    year: int | None = Field(default=None, ge=1900, le=2100)
+    venue: str | None = Field(default=None, max_length=255)
+    abstract: str | None = None
+    keywords: str | None = None
+    doi: str | None = Field(default=None, max_length=255)
+    external_link: str | None = Field(default=None, max_length=500)
+    axis_id: int | None = None
+    comment: str | None = None
+
+
+class PublicationChangeRequestRead(BaseModel):
+    id: int
+    publication_id: int
+    publication_title: str
+    owner_id: int
+    owner_name: str
+    request_type: str
+    new_data: str | None
+    status: str
+    admin_comment: str | None
+    created_at: datetime
+
+
+class ChangeRequestDecision(BaseModel):
+    decision: str = Field(pattern="^(approved|rejected)$")
+    comment: str | None = None
 
 
 class CommunicationBase(BaseModel):
@@ -295,6 +376,45 @@ class NewsItemRead(NewsItemBase):
     created_at: datetime
 
 
+class GalleryItemBase(BaseModel):
+    title: str = Field(min_length=2, max_length=255)
+    image_url: str = Field(min_length=4, max_length=1000)
+    caption: str | None = Field(default=None, max_length=2000)
+    category: str | None = Field(default=None, max_length=120)
+    is_published: bool = True
+
+
+class GalleryItemCreate(GalleryItemBase):
+    pass
+
+
+class GalleryItemUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=255)
+    image_url: str | None = Field(default=None, min_length=4, max_length=1000)
+    caption: str | None = Field(default=None, max_length=2000)
+    category: str | None = Field(default=None, max_length=120)
+    is_published: bool | None = None
+
+
+class GalleryItemRead(GalleryItemBase):
+    id: int
+    author_id: int
+    author_name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ContactMessageRequest(BaseModel):
+    first_name: str = Field(min_length=1, max_length=120)
+    last_name: str = Field(min_length=1, max_length=120)
+    email: EmailStr
+    message: str = Field(min_length=10, max_length=4000)
+
+
+class ContactMessageResponse(BaseModel):
+    message: str
+
+
 class ModerationDecisionRequest(BaseModel):
     decision: ValidationStatus
     comment: str | None = None
@@ -333,6 +453,29 @@ class ActivityItem(BaseModel):
     date: str
     status: str
     user: str | None = None
+
+
+class MemberNotificationRead(BaseModel):
+    id: int
+    title: str
+    message: str
+    category: str
+    content_type: str | None
+    content_id: int | None
+    is_read: bool
+    created_at: datetime
+
+
+class ValidationTimelineItem(BaseModel):
+    id: str
+    content_type: str
+    content_id: int
+    title: str
+    event: str
+    status: ValidationStatus
+    comment: str | None = None
+    actor_name: str | None = None
+    created_at: datetime
 
 
 class MemberDashboardResponse(BaseModel):

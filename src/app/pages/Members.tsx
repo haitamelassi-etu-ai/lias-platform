@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { motion } from "motion/react";
-import { Search, Mail } from "lucide-react";
+import { BookOpen, ExternalLink, Mail, Search, UserRound } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { ApiError, listMembers, type MemberProfile } from "../lib/api";
 
@@ -50,6 +51,8 @@ export function Members() {
       return matchesSearch && matchesRole;
     });
   }, [members, searchTerm, filterRole]);
+
+  const canShowEmail = (email: string) => !email.endsWith("@annuaire.lias.ma");
 
   return (
     <div className="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -153,25 +156,55 @@ export function Members() {
                   </p>
                 )}
 
-                <div className="mt-auto pt-4 flex justify-between items-center border-t border-brand-primary/5">
-                  <a
-                    href={`mailto:${member.email}`}
-                    className="inline-flex items-center gap-2 text-sm text-text-secondary hover:text-brand-secondary transition-colors font-medium"
-                    title={`Contacter ${member.full_name}`}
+                <div className="mb-4 rounded-lg border border-brand-primary/10 bg-brand-primary/[0.03] px-3 py-2 text-xs font-bold text-brand-primary">
+                  {member.publication_count} publication{member.publication_count > 1 ? "s" : ""} valide{member.publication_count > 1 ? "s" : ""}
+                </div>
+
+                <div className="mt-auto pt-4 flex flex-wrap items-center gap-2 border-t border-brand-primary/5">
+                  <Link
+                    to={`/publications?search=${encodeURIComponent(member.full_name)}`}
+                    className="inline-flex items-center gap-2 rounded-lg bg-brand-primary px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-primary/90"
+                    title={`Voir les publications de ${member.full_name}`}
                   >
-                    <Mail size={18} />
-                    Contacter
-                  </a>
-                  {member.orcid_id && (
+                    <BookOpen size={15} />
+                    Publications
+                  </Link>
+
+                  <Link
+                    to={`/members/${member.id}`}
+                    className="inline-flex items-center gap-2 rounded-lg border border-brand-primary/10 px-3 py-2 text-xs font-bold text-brand-primary transition-colors hover:bg-brand-primary/5"
+                    title={`Voir le profil de ${member.full_name}`}
+                  >
+                    <UserRound size={15} />
+                    Profil
+                  </Link>
+
+                  {canShowEmail(member.email) && (
+                    <a
+                      href={`mailto:${member.email}`}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-text-secondary hover:text-brand-secondary transition-colors"
+                      title={`Contacter ${member.full_name}`}
+                    >
+                      <Mail size={15} />
+                      Contact
+                    </a>
+                  )}
+
+                  {member.orcid_id ? (
                     <a
                       href={`https://orcid.org/${member.orcid_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs font-bold text-green-700 bg-green-50 px-2 py-1 rounded border border-green-200 hover:bg-green-100 transition-colors"
+                      className="ml-auto inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-700 transition-colors hover:bg-green-100"
                       title="Profil ORCID"
                     >
+                      <ExternalLink size={13} />
                       ORCID
                     </a>
+                  ) : (
+                    <span className="ml-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-500">
+                      ORCID non publie
+                    </span>
                   )}
                 </div>
               </div>

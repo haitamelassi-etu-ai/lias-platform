@@ -28,10 +28,23 @@
     --bg-secondary: #FFFFFF;
   }
 
+  :root.dark {
+    --brand-primary: #E5EDF7;
+    --brand-secondary: #22D3EE;
+    --brand-tertiary: #0B1120;
+    --brand-accent: #FF9A76;
+
+    --text-primary: #F8FAFC;
+    --text-secondary: #CBD5E1;
+    --bg-primary: #0B1120;
+    --bg-secondary: #111827;
+  }
+
   body {
     background-color: var(--bg-primary);
     color: var(--text-primary);
     font-family: var(--font-sans);
+    transition: background-color 180ms ease, color 180ms ease;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -42,6 +55,53 @@
   
   p {
     font-family: var(--font-serif);
+  }
+}
+
+@layer utilities {
+  .dark .bg-white {
+    background-color: var(--bg-secondary) !important;
+  }
+
+  .dark .bg-white\/80 {
+    background-color: rgb(17 24 39 / 0.88) !important;
+  }
+
+  .dark .bg-brand-primary {
+    background-color: #0F172A !important;
+  }
+
+  .dark .bg-gray-50,
+  .dark .bg-gray-50\/50,
+  .dark .bg-gray-100,
+  .dark .bg-slate-50,
+  .dark .bg-slate-100 {
+    background-color: rgb(30 41 59 / 0.72) !important;
+  }
+
+  .dark .border-gray-100,
+  .dark .border-gray-200,
+  .dark .border-gray-300 {
+    border-color: rgb(71 85 105 / 0.7) !important;
+  }
+
+  .dark input,
+  .dark textarea,
+  .dark select {
+    background-color: rgb(15 23 42 / 0.78);
+    border-color: rgb(71 85 105 / 0.75);
+    color: var(--text-primary);
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: rgb(148 163 184);
+  }
+
+  .dark .shadow-sm,
+  .dark .shadow-xl,
+  .dark .shadow-2xl {
+    box-shadow: 0 18px 60px rgb(0 0 0 / 0.24) !important;
   }
 }
 

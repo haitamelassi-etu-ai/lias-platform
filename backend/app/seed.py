@@ -6,14 +6,78 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .core.security import get_password_hash
+from .real_lias_members import sync_real_lias_members
 
 
 DEFAULT_PASSWORD = os.getenv("LIAS_SEED_PASSWORD", "lias2024demo")
 
 
+def seed_public_news(db: Session, admin_id: int) -> None:
+    news_items = [
+        {
+            "title": "Lancement de la nouvelle plateforme scientifique LIAS",
+            "content": "La plateforme institutionnelle et scientifique du LIAS est opérationnelle.",
+            "category": "Annonce",
+        },
+        {
+            "title": "ICISCT 2026 : appel à communication",
+            "content": (
+                "Le LIAS annonce l'International Conference on Innovative Smart City "
+                "Technologies, dédiée aux technologies pour les villes intelligentes, "
+                "à l'IA, l'IoT, la cybersécurité et la transformation numérique."
+            ),
+            "category": "Appel à communication",
+        },
+        {
+            "title": "ICAIS 2025 : intelligence artificielle et systèmes",
+            "content": (
+                "Le laboratoire organise l'International Conference on Artificial "
+                "Intelligence and Systems, un rendez-vous scientifique consacré aux "
+                "avancées de l'intelligence artificielle et des systèmes intelligents."
+            ),
+            "category": "Conférence",
+        },
+        {
+            "title": "Bilan scientifique 2021-2024",
+            "content": (
+                "Le LIAS consolide un bilan de plus de 230 publications indexées, "
+                "28 thèses soutenues, 42 thèses en cours et 8 projets de recherche."
+            ),
+            "category": "Recherche",
+        },
+    ]
+
+    existing_titles = set(
+        db.scalars(
+            select(models.NewsItem.title).where(
+                models.NewsItem.title.in_([item["title"] for item in news_items])
+            )
+        ).all()
+    )
+    for item in news_items:
+        if item["title"] in existing_titles:
+            continue
+        db.add(
+            models.NewsItem(
+                **item,
+                is_published=True,
+                published_at=datetime.utcnow(),
+                validation_status=models.ValidationStatus.VALIDATED,
+                author_id=admin_id,
+            )
+        )
+
+
 def seed_database(db: Session) -> None:
     has_users = db.scalar(select(models.User.id).limit(1))
     if has_users:
+        admin_id = db.scalar(
+            select(models.User.id).where(models.User.role == models.UserRole.ADMIN).limit(1)
+        )
+        if admin_id:
+            seed_public_news(db, admin_id)
+        sync_real_lias_members(db, commit=False)
+        db.commit()
         return
 
     axis_data = [
@@ -47,6 +111,8 @@ def seed_database(db: Session) -> None:
         full_name="Dr. Chercheur LIAS",
         hashed_password=get_password_hash(DEFAULT_PASSWORD),
         role=models.UserRole.MEMBER,
+        orcid_sub="0000-0002-1825-0097",
+        orcid_name_locked=True,
     )
     member2 = models.User(
         email="doctorant@lias.fsb.ac.ma",
@@ -59,12 +125,16 @@ def seed_database(db: Session) -> None:
         full_name="Samir Benali",
         hashed_password=get_password_hash(DEFAULT_PASSWORD),
         role=models.UserRole.MEMBER,
+        orcid_sub="0000-0001-5109-3700",
+        orcid_name_locked=True,
     )
     member4 = models.User(
         email="leila.tazi@lias.fsb.ac.ma",
         full_name="Leila Tazi",
         hashed_password=get_password_hash(DEFAULT_PASSWORD),
         role=models.UserRole.MEMBER,
+        orcid_sub="0000-0002-1694-233X",
+        orcid_name_locked=True,
     )
     member5 = models.User(
         email="yassine.ouahbi@lias.fsb.ac.ma",
@@ -125,7 +195,7 @@ def seed_database(db: Session) -> None:
             interests="Deep learning, séries temporelles, IoT",
             laboratory="LIAS",
             research_axis_id=axis_data[0].id,
-            orcid_id="0000-0001-2345-6789",
+            orcid_id="0000-0002-1825-0097",
         ),
         models.MemberProfile(
             user_id=member2.id,
@@ -146,7 +216,7 @@ def seed_database(db: Session) -> None:
             interests="agents, optimisation, IA explicable",
             laboratory="LIAS",
             research_axis_id=axis_data[0].id,
-            orcid_id="0000-0003-1122-3344",
+            orcid_id="0000-0001-5109-3700",
         ),
         models.MemberProfile(
             user_id=member4.id,
@@ -157,7 +227,7 @@ def seed_database(db: Session) -> None:
             interests="commande robuste, diagnostic, systèmes dynamiques",
             laboratory="LIAS",
             research_axis_id=axis_data[1].id,
-            orcid_id="0000-0002-4455-6677",
+            orcid_id="0000-0002-1694-233X",
         ),
         models.MemberProfile(
             user_id=member5.id,
@@ -384,16 +454,7 @@ def seed_database(db: Session) -> None:
     ]
     db.add_all(events)
 
-    news = models.NewsItem(
-        title="Lancement de la nouvelle plateforme scientifique LIAS",
-        content="La plateforme institutionnelle et scientifique est opérationnelle.",
-        category="Annonce",
-        is_published=True,
-        published_at=datetime.utcnow(),
-        validation_status=models.ValidationStatus.VALIDATED,
-        author_id=admin.id,
-    )
-    db.add(news)
+    seed_public_news(db, admin.id)
 
     # Flush to assign IDs before referencing seeded entities in validation records.
     db.flush()
@@ -416,5 +477,7 @@ def seed_database(db: Session) -> None:
         ),
     ]
     db.add_all(validations)
+
+    sync_real_lias_members(db, commit=False)
 
     db.commit()

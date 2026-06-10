@@ -98,9 +98,13 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 ```env
 LIAS_SECRET_KEY=change-this-secret-key-in-production
 LIAS_ACCESS_TOKEN_EXPIRE_MINUTES=60
-LIAS_DATABASE_URL=sqlite:///./lias.db
+LIAS_DATABASE_URL=postgresql://lias_user:lias_password@127.0.0.1:5432/lias_db
+# SQLite local possible pour demo rapide :
+# LIAS_DATABASE_URL=sqlite:///./lias.db
 LIAS_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 LIAS_SEED_PASSWORD=lias2024demo
+
+# Guide PostgreSQL detaille : backend/POSTGRESQL_SETUP.md
 ```
 
 > La clé `LIAS_SECRET_KEY` doit être changée avant tout déploiement en production.
@@ -116,6 +120,25 @@ LIAS_SEED_PASSWORD=lias2024demo
 | Membre | leila.tazi@lias.fsb.ac.ma | lias2024demo |
 
 > Mot de passe configurable via la variable `LIAS_SEED_PASSWORD` dans `backend/.env`.
+
+## Mise en production
+
+Avant une utilisation officielle par l'administration, utiliser les fichiers de production :
+
+- `backend/.env.production.example` pour configurer l'API FastAPI.
+- `.env.production.example` pour configurer le frontend Vite.
+- `DEPLOYMENT_CHECKLIST.md` pour la checklist de deploiement.
+
+Points obligatoires :
+
+- `LIAS_ENV=production`
+- `LIAS_SECRET_KEY` fort et unique
+- PostgreSQL obligatoire
+- `LIAS_DOCS_ENABLED=false` pour fermer Swagger en production
+- `LIAS_AUTO_CREATE_TABLES=false`
+- `LIAS_AUTO_SEED=false`
+- SMTP configure pour envoyer les emails de mot de passe oublie
+- migrations Alembic executees avec `alembic upgrade head`
 
 ## Intégration ORCID
 

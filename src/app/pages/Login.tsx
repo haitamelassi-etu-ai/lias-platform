@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Navigate, Link } from "react-router";
 import { motion } from "motion/react";
-import { Lock, Mail, ArrowRight, ShieldCheck } from "lucide-react";
+import { Lock, ArrowRight, ShieldCheck, AtSign } from "lucide-react";
 import { ApiError } from "../lib/api";
 
 export function Login() {
   const { user, login } = useAuth();
   const [role, setRole] = useState<"member" | "admin">("member");
-  const [email, setEmail] = useState("chercheur@lias.fsb.ac.ma");
+  const [identifier, setIdentifier] = useState("chercheur@lias.fsb.ac.ma");
   const [password, setPassword] = useState("lias2024demo");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export function Login() {
 
   const handleRolePreset = (selectedRole: "member" | "admin") => {
     setRole(selectedRole);
-    setEmail(
+    setIdentifier(
       selectedRole === "admin"
         ? "admin@lias.fsb.ac.ma"
         : "chercheur@lias.fsb.ac.ma",
@@ -33,7 +33,7 @@ export function Login() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      await login(identifier, password);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -72,7 +72,7 @@ export function Login() {
         className="mt-8 sm:mx-auto sm:w-full sm:max-w-md"
       >
         <div className="bg-white py-8 px-4 shadow-2xl shadow-brand-primary/5 sm:rounded-2xl sm:px-10 border border-brand-primary/10">
-          <form className="space-y-6" onSubmit={handleLogin}>
+          <form className="space-y-6" onSubmit={(e) => void handleLogin(e)}>
             <div>
               <label htmlFor="role" className="block text-sm font-medium text-brand-primary font-sans">
                 Sélectionnez un profil de test
@@ -104,19 +104,20 @@ export function Login() {
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-brand-primary font-sans">
-                Adresse Email Académique
+              <label htmlFor="identifier" className="block text-sm font-medium text-brand-primary font-sans">
+                Email ou ORCID ID
               </label>
               <div className="mt-1 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Mail size={18} />
+                  <AtSign size={18} />
                 </div>
                 <input
-                  id="email"
-                  type="email"
+                  id="identifier"
+                  type="text"
                   required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="email@lias.ac.ma  ou  0000-0000-0000-0000"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   className="block w-full pl-10 sm:text-sm border-gray-300 rounded-xl focus:ring-brand-secondary focus:border-brand-secondary py-3 border bg-gray-50/50"
                 />
               </div>
@@ -135,7 +136,7 @@ export function Login() {
                   type="password"
                   required
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="block w-full pl-10 sm:text-sm border-gray-300 rounded-xl focus:ring-brand-secondary focus:border-brand-secondary py-3 border bg-gray-50/50"
                 />
               </div>
@@ -161,34 +162,32 @@ export function Login() {
               </div>
 
               <div className="text-sm">
-                <a href="#" className="font-medium text-brand-secondary hover:text-brand-primary transition-colors font-sans">
+                <Link to="/forgot-password" className="font-medium text-brand-secondary hover:text-brand-primary transition-colors font-sans">
                   Mot de passe oublié ?
-                </a>
+                </Link>
               </div>
             </div>
 
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-brand-primary hover:bg-brand-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-all disabled:opacity-70"
-              >
-                {isLoading ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-                  />
-                ) : (
-                  <>
-                    Connexion Sécurisée <ArrowRight size={18} />
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-brand-primary hover:bg-brand-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-all disabled:opacity-70"
+            >
+              {isLoading ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                  className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                />
+              ) : (
+                <>
+                  Connexion Sécurisée <ArrowRight size={18} />
+                </>
+              )}
+            </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-text-secondary font-serif">
+          <div className="mt-5 text-center text-sm text-text-secondary font-serif">
             Pas encore de compte ?{" "}
             <Link
               to="/register"

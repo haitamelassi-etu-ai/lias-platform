@@ -13,6 +13,8 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 def _humanize_datetime(value: datetime) -> str:
     now = datetime.now(UTC).replace(tzinfo=None)
+    if value.tzinfo is not None:
+        value = value.astimezone(UTC).replace(tzinfo=None)
     delta = now - value
     if delta.days >= 1:
         return f"Il y a {delta.days} jour(s)"
@@ -152,7 +154,10 @@ def admin_dashboard(
     _: models.User = Depends(require_admin),
 ) -> schemas.AdminDashboardResponse:
     total_members = db.scalar(
-        select(func.count(models.User.id)).where(models.User.role == models.UserRole.MEMBER)
+        select(func.count(models.User.id)).where(
+            models.User.role == models.UserRole.MEMBER,
+            models.User.is_active.is_(True),
+        )
     )
     total_publications = db.scalar(select(func.count(models.Publication.id)))
     active_projects = db.scalar(

@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +14,7 @@ from ..core.deps import get_current_active_user
 router = APIRouter(prefix="/orcid", tags=["orcid"])
 
 ORCID_BASE_URL = "https://pub.orcid.org/v3.0"
+ORCID_RE = re.compile(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dXx]$")
 
 
 class OrcidImportRequest(BaseModel):
@@ -22,6 +24,16 @@ class OrcidImportRequest(BaseModel):
 
 def _orcid_headers() -> dict[str, str]:
     return {"Accept": "application/json"}
+
+
+def _normalize_orcid_id(orcid_id: str) -> str:
+    normalized = orcid_id.strip().upper()
+    if not ORCID_RE.match(normalized):
+        raise HTTPException(
+            status_code=400,
+            detail="Format ORCID invalide. Exemple attendu : 0000-0000-0000-0000",
+        )
+    return normalized
 
 
 def _parse_works(works_payload: dict) -> list[schemas.OrcidWorkPreview]:
@@ -73,6 +85,7 @@ def _parse_works(works_payload: dict) -> list[schemas.OrcidWorkPreview]:
 
 
 def _fetch_orcid_profile(orcid_id: str) -> schemas.OrcidProfilePreview:
+    orcid_id = _normalize_orcid_id(orcid_id)
     person_url = f"{ORCID_BASE_URL}/{orcid_id}/person"
     works_url = f"{ORCID_BASE_URL}/{orcid_id}/works"
 
@@ -83,14 +96,14 @@ def _fetch_orcid_profile(orcid_id: str) -> schemas.OrcidProfilePreview:
     except httpx.RequestError as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Unable to contact ORCID service: {exc}",
+            detail=f"Impossible de contacter le service ORCID : {exc}",
         )
 
     if person_response.status_code == 404:
-        raise HTTPException(status_code=404, detail="ORCID identifier not found")
+        raise HTTPException(status_code=404, detail="Identifiant ORCID introuvable")
 
     if person_response.status_code >= 400 or works_response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="ORCID service returned an error")
+        raise HTTPException(status_code=502, detail="Le service ORCID a retourné une erreur")
 
     person_payload = person_response.json()
     works_payload = works_response.json()
@@ -122,18 +135,53 @@ def link_orcid(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_active_user),
 ) -> schemas.MemberProfileRead:
-    _ = _fetch_orcid_profile(payload.orcid_id)
+    orcid_id = _normalize_orcid_id(payload.orcid_id)
 
     profile = db.scalar(
         select(models.MemberProfile).where(models.MemberProfile.user_id == current_user.id)
     )
+
+    linked_orcid = (profile.orcid_id if profile else None) or current_user.orcid_sub
+    if linked_orcid:
+        raise HTTPException(
+            status_code=400,
+            detail="Un identifiant ORCID est deja lie a ce compte. Il ne peut pas etre remplace depuis le profil.",
+        )
+
+    existing_user = db.scalar(
+        select(models.User).where(
+            models.User.orcid_sub == orcid_id,
+            models.User.id != current_user.id,
+        )
+    )
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Ce compte ORCID est déjà lié à un autre utilisateur")
+
+    existing_profile = db.scalar(
+        select(models.MemberProfile).where(
+            models.MemberProfile.orcid_id == orcid_id,
+            models.MemberProfile.user_id != current_user.id,
+        )
+    )
+    if existing_profile:
+        raise HTTPException(status_code=400, detail="Cet ORCID est déjà utilisé par un autre profil")
+
+    orcid_profile = _fetch_orcid_profile(orcid_id)
+
     if profile is None:
         profile = models.MemberProfile(user_id=current_user.id, laboratory="LIAS")
         db.add(profile)
         db.flush()
 
-    profile.orcid_id = payload.orcid_id
+    profile.orcid_id = orcid_id
+    if orcid_profile.biography and not profile.biography:
+        profile.biography = orcid_profile.biography
+
+    current_user.orcid_sub = orcid_id
+    current_user.orcid_name_locked = True
     db.commit()
+    db.refresh(profile)
+    db.refresh(current_user)
 
     axis_title = profile.research_axis.title if profile.research_axis else None
     return schemas.MemberProfileRead(
@@ -153,6 +201,7 @@ def link_orcid(
         laboratory=profile.laboratory,
         research_axis_id=profile.research_axis_id,
         research_axis_title=axis_title,
+        publication_count=0,
         updated_at=profile.updated_at,
     )
 
@@ -171,15 +220,40 @@ def import_publications_from_orcid(
         db.add(profile)
         db.flush()
 
-    orcid_id = payload.orcid_id or profile.orcid_id
+    linked_orcid_id = profile.orcid_id or current_user.orcid_sub
+    requested_orcid_id = _normalize_orcid_id(payload.orcid_id) if payload.orcid_id else None
+
+    if requested_orcid_id and linked_orcid_id and requested_orcid_id != linked_orcid_id:
+        raise HTTPException(
+            status_code=400,
+            detail="L'ORCID demandé ne correspond pas au compte lié. Reliez d'abord ce profil ORCID.",
+        )
+
+    orcid_id = linked_orcid_id or requested_orcid_id
     if not orcid_id:
         raise HTTPException(
             status_code=400,
-            detail="No ORCID linked. Please link an ORCID first.",
+            detail="Aucun ORCID lié. Veuillez d'abord lier votre compte ORCID.",
         )
+
+    existing_user = db.scalar(
+        select(models.User).where(
+            models.User.orcid_sub == orcid_id,
+            models.User.id != current_user.id,
+        )
+    )
+    existing_profile = db.scalar(
+        select(models.MemberProfile).where(
+            models.MemberProfile.orcid_id == orcid_id,
+            models.MemberProfile.user_id != current_user.id,
+        )
+    )
+    if existing_user or existing_profile:
+        raise HTTPException(status_code=400, detail="Cet ORCID est déjà lié à un autre utilisateur.")
 
     orcid_profile = _fetch_orcid_profile(orcid_id)
     profile.orcid_id = orcid_id
+    current_user.orcid_sub = orcid_id
 
     imported = 0
     skipped = 0
@@ -226,5 +300,5 @@ def import_publications_from_orcid(
     return schemas.OrcidImportResponse(
         imported=imported,
         skipped=skipped,
-        message="ORCID import completed",
+        message="Import ORCID terminé",
     )

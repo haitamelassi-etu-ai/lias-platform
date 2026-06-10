@@ -11,6 +11,11 @@ export interface User {
   email: string;
   full_name: string;
   role: Role;
+  orcid_name_locked: boolean;
+}
+
+export interface AdminUser extends User {
+  orcid_id: string | null;
 }
 
 export interface AuthResponse {
@@ -43,6 +48,7 @@ export interface MemberProfile {
   laboratory: string;
   research_axis_id: number | null;
   research_axis_title: string | null;
+  publication_count: number;
   updated_at: string;
 }
 
@@ -144,6 +150,19 @@ export interface NewsItem {
   created_at: string;
 }
 
+export interface GalleryItem {
+  id: number;
+  title: string;
+  image_url: string;
+  caption: string | null;
+  category: string | null;
+  is_published: boolean;
+  author_id: number;
+  author_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DashboardStat {
   label: string;
   value: number;
@@ -178,6 +197,56 @@ export interface ModerationQueueItem {
   author_name: string;
   created_at: string;
   status: ValidationStatus;
+}
+
+export interface PublicationChangeRequest {
+  id: number;
+  publication_id: number;
+  publication_title: string;
+  owner_id: number;
+  owner_name: string;
+  request_type: "edit" | "delete";
+  new_data: string | null;
+  status: "pending" | "approved" | "rejected";
+  admin_comment: string | null;
+  created_at: string;
+}
+
+export interface MemberNotification {
+  id: number;
+  title: string;
+  message: string;
+  category: "success" | "warning" | "danger" | "info" | string;
+  content_type: string | null;
+  content_id: number | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface ValidationTimelineItem {
+  id: string;
+  content_type: "publication" | "communication" | "project" | string;
+  content_id: number;
+  title: string;
+  event: string;
+  status: ValidationStatus;
+  comment: string | null;
+  actor_name: string | null;
+  created_at: string;
+}
+
+export interface AuditLog {
+  id: number;
+  actor_id: number;
+  actor_email: string;
+  actor_name: string;
+  actor_role: string;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  entity_title: string | null;
+  details: string | null;
+  created_at: string;
 }
 
 const API_BASE_URL =
@@ -239,10 +308,30 @@ async function request<T>(
   return data as T;
 }
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
+export async function login(identifier: string, password: string): Promise<AuthResponse> {
   return request<AuthResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier, password }),
+  });
+}
+
+export async function requestPasswordReset(email: string): Promise<{
+  message: string;
+  reset_url: string | null;
+}> {
+  return request<{ message: string; reset_url: string | null }>("/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  return request<{ message: string }>("/auth/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
   });
 }
 
@@ -250,10 +339,34 @@ export async function register(
   full_name: string,
   email: string,
   password: string,
+  orcid_id?: string,
 ): Promise<User> {
   return request<User>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ full_name, email, password }),
+    body: JSON.stringify({ full_name, email, password, orcid_id: orcid_id || undefined }),
+  });
+}
+
+export interface OrcidPreview {
+  orcid_id: string;
+  full_name: string | null;
+  biography: string | null;
+  works: { title: string; publication_type: string; year: number | null; venue: string | null; doi: string | null }[];
+}
+
+export async function lookupOrcid(orcidId: string): Promise<OrcidPreview> {
+  return request<OrcidPreview>(`/orcid/${orcidId}/preview`);
+}
+
+export async function completeOrcidSetup(payload: {
+  orcid_id: string;
+  orcid_name: string;
+  email: string;
+  password: string;
+}): Promise<AuthResponse> {
+  return request<AuthResponse>("/auth/orcid/complete-setup", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -275,8 +388,43 @@ export async function listMembers(params?: {
   return request<MemberProfile[]>(path);
 }
 
+export async function getMember(profileId: number): Promise<MemberProfile> {
+  return request<MemberProfile>(`/members/${profileId}`);
+}
+
 export async function getMyProfile(token: string): Promise<MemberProfile> {
   return request<MemberProfile>("/members/me/profile", {}, token);
+}
+
+export async function listMyNotifications(
+  token: string,
+  unreadOnly = false,
+): Promise<MemberNotification[]> {
+  const query = unreadOnly ? "?unread_only=true" : "";
+  return request<MemberNotification[]>(`/members/me/notifications${query}`, {}, token);
+}
+
+export async function markNotificationRead(
+  token: string,
+  notificationId: number,
+): Promise<MemberNotification> {
+  return request<MemberNotification>(
+    `/members/me/notifications/${notificationId}/read`,
+    { method: "POST" },
+    token,
+  );
+}
+
+export async function markAllNotificationsRead(token: string): Promise<{ updated: number }> {
+  return request<{ updated: number }>(
+    "/members/me/notifications/read-all",
+    { method: "POST" },
+    token,
+  );
+}
+
+export async function listMyValidationTimeline(token: string): Promise<ValidationTimelineItem[]> {
+  return request<ValidationTimelineItem[]>("/members/me/validation-timeline", {}, token);
 }
 
 export async function updateMyProfile(
@@ -315,17 +463,110 @@ export async function createAxis(
   );
 }
 
+export async function updateAxis(
+  token: string,
+  axisId: number,
+  payload: {
+    title?: string;
+    description?: string;
+    lead_member_name?: string | null;
+  },
+): Promise<ResearchAxis> {
+  return request<ResearchAxis>(
+    `/axes/${axisId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function deleteAxis(token: string, axisId: number): Promise<void> {
+  return request<void>(`/axes/${axisId}`, { method: "DELETE" }, token);
+}
+
 export async function listPublications(params?: {
   search?: string;
   year?: number;
+  axis_id?: number;
+  owner_id?: number;
+  publication_type?: string;
+  source?: string;
 }): Promise<Publication[]> {
-  const query = toQueryString({ search: params?.search, year: params?.year });
+  const query = toQueryString({
+    search: params?.search,
+    year: params?.year,
+    axis_id: params?.axis_id,
+    owner_id: params?.owner_id,
+    publication_type: params?.publication_type,
+    source: params?.source,
+  });
   const path = query ? `/publications?${query}` : "/publications";
   return request<Publication[]>(path);
 }
 
+export async function getPublication(publicationId: number): Promise<Publication> {
+  return request<Publication>(`/publications/${publicationId}`);
+}
+
 export async function listMyPublications(token: string): Promise<Publication[]> {
   return request<Publication[]>("/publications/me", {}, token);
+}
+
+export async function requestEditPublication(
+  token: string,
+  publicationId: number,
+  payload: {
+    title?: string;
+    authors?: string;
+    publication_type?: string;
+    year?: number;
+    venue?: string;
+    abstract?: string;
+    keywords?: string;
+    doi?: string;
+    external_link?: string;
+    axis_id?: number | null;
+  },
+): Promise<PublicationChangeRequest> {
+  return request<PublicationChangeRequest>(
+    `/publications/${publicationId}/request-edit`,
+    { method: "POST", body: JSON.stringify(payload) },
+    token,
+  );
+}
+
+export async function requestDeletePublication(
+  token: string,
+  publicationId: number,
+): Promise<PublicationChangeRequest> {
+  return request<PublicationChangeRequest>(
+    `/publications/${publicationId}/request-delete`,
+    { method: "POST" },
+    token,
+  );
+}
+
+export async function listMyChangeRequests(token: string): Promise<PublicationChangeRequest[]> {
+  return request<PublicationChangeRequest[]>("/publications/me/change-requests", {}, token);
+}
+
+export async function listModerationChangeRequests(token: string): Promise<PublicationChangeRequest[]> {
+  return request<PublicationChangeRequest[]>("/moderation/change-requests", {}, token);
+}
+
+export async function decideChangeRequest(
+  token: string,
+  requestId: number,
+  decision: "approved" | "rejected",
+  comment?: string,
+): Promise<{ message: string }> {
+  return request<{ message: string }>(
+    `/moderation/change-requests/${requestId}/decision`,
+    { method: "POST", body: JSON.stringify({ decision, comment }) },
+    token,
+  );
 }
 
 export async function createPublication(
@@ -443,6 +684,10 @@ export async function listProjects(): Promise<Project[]> {
   return request<Project[]>("/projects");
 }
 
+export async function listAdminProjects(token: string): Promise<Project[]> {
+  return request<Project[]>("/projects?include_all=true", {}, token);
+}
+
 export async function listMyProjects(token: string): Promise<Project[]> {
   return request<Project[]>("/projects/me", {}, token);
 }
@@ -470,6 +715,36 @@ export async function createProject(
     },
     token,
   );
+}
+
+export async function updateProject(
+  token: string,
+  projectId: number,
+  payload: {
+    title?: string;
+    summary?: string;
+    lead_member_name?: string | null;
+    partners?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    funding?: string | null;
+    status?: string;
+    is_public?: boolean;
+    axis_id?: number | null;
+  },
+): Promise<Project> {
+  return request<Project>(
+    `/projects/${projectId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function deleteProject(token: string, projectId: number): Promise<void> {
+  return request<void>(`/projects/${projectId}`, { method: "DELETE" }, token);
 }
 
 export async function listEvents(): Promise<LabEvent[]> {
@@ -508,8 +783,57 @@ export async function createEvent(
   );
 }
 
+export async function updateEvent(
+  token: string,
+  eventId: number,
+  payload: {
+    title?: string;
+    description?: string;
+    event_type?: string;
+    start_date?: string;
+    end_date?: string | null;
+    location?: string;
+    program?: string;
+    speakers?: string;
+    visual_url?: string;
+    lifecycle_status?: "upcoming" | "past";
+    registration_link?: string | null;
+    is_public?: boolean;
+    axis_id?: number | null;
+  },
+): Promise<LabEvent> {
+  return request<LabEvent>(
+    `/events/${eventId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function deleteEvent(token: string, eventId: number): Promise<void> {
+  return request<void>(`/events/${eventId}`, { method: "DELETE" }, token);
+}
+
 export async function listAdminNews(token: string): Promise<NewsItem[]> {
   return request<NewsItem[]>("/news?include_all=true", {}, token);
+}
+
+export async function listNews(): Promise<NewsItem[]> {
+  return request<NewsItem[]>("/news");
+}
+
+export async function submitContactMessage(payload: {
+  first_name: string;
+  last_name: string;
+  email: string;
+  message: string;
+}): Promise<{ message: string }> {
+  return request<{ message: string }>("/contact", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function createNews(
@@ -532,8 +856,103 @@ export async function createNews(
   );
 }
 
-export async function listAdminUsers(token: string): Promise<User[]> {
-  return request<User[]>("/members/admin/users", {}, token);
+export async function updateNews(
+  token: string,
+  newsId: number,
+  payload: {
+    title?: string;
+    content?: string;
+    category?: string | null;
+    image_url?: string | null;
+    is_published?: boolean;
+  },
+): Promise<NewsItem> {
+  return request<NewsItem>(
+    `/news/${newsId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function deleteNews(token: string, newsId: number): Promise<void> {
+  return request<void>(`/news/${newsId}`, { method: "DELETE" }, token);
+}
+
+export async function listGalleryItems(): Promise<GalleryItem[]> {
+  return request<GalleryItem[]>("/gallery");
+}
+
+export async function listAdminGalleryItems(token: string): Promise<GalleryItem[]> {
+  return request<GalleryItem[]>("/gallery?include_unpublished=true", {}, token);
+}
+
+export async function createGalleryItem(
+  token: string,
+  payload: {
+    title: string;
+    image_url: string;
+    caption?: string | null;
+    category?: string | null;
+    is_published?: boolean;
+  },
+): Promise<GalleryItem> {
+  return request<GalleryItem>(
+    "/gallery",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function updateGalleryItem(
+  token: string,
+  itemId: number,
+  payload: {
+    title?: string;
+    image_url?: string;
+    caption?: string | null;
+    category?: string | null;
+    is_published?: boolean;
+  },
+): Promise<GalleryItem> {
+  return request<GalleryItem>(
+    `/gallery/${itemId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function deleteGalleryItem(token: string, itemId: number): Promise<void> {
+  return request<void>(`/gallery/${itemId}`, { method: "DELETE" }, token);
+}
+
+export async function listAdminUsers(token: string): Promise<AdminUser[]> {
+  return request<AdminUser[]>("/members/admin/users", {}, token);
+}
+
+export async function listAuditLogs(
+  token: string,
+  params?: {
+    action?: string;
+    entity_type?: string;
+    limit?: number;
+  },
+): Promise<AuditLog[]> {
+  const query = toQueryString({
+    action: params?.action,
+    entity_type: params?.entity_type,
+    limit: params?.limit,
+  });
+  const path = query ? `/audit/logs?${query}` : "/audit/logs";
+  return request<AuditLog[]>(path, {}, token);
 }
 
 export async function updateUserRole(
@@ -542,6 +961,21 @@ export async function updateUserRole(
   role: Role,
 ): Promise<User> {
   return request<User>(`/members/admin/users/${userId}/role?role=${role}`, { method: "PATCH" }, token);
+}
+
+export async function updateAdminUserOrcid(
+  token: string,
+  userId: number,
+  orcidId: string | null,
+): Promise<AdminUser> {
+  return request<AdminUser>(
+    `/members/admin/users/${userId}/orcid`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ orcid_id: orcidId }),
+    },
+    token,
+  );
 }
 
 export async function downloadMyPublicationsCsv(token: string): Promise<void> {

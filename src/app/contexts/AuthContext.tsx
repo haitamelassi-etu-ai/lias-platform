@@ -8,6 +8,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithToken: (token: string, user: User) => void;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -48,6 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_STORAGE_KEY, response.access_token);
     setToken(response.access_token);
     setUser(response.user);
+    setIsLoading(false);
+  };
+
+  const loginWithToken = (newToken: string, newUser: User) => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, newToken);
+    setToken(newToken);
+    setUser(newUser);
+    setIsLoading(false);
   };
 
   const logout = () => {
@@ -65,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ user, token, isLoading, login, logout, refreshUser }),
+    () => ({ user, token, isLoading, login, loginWithToken, logout, refreshUser }),
     [user, token, isLoading],
   );
 

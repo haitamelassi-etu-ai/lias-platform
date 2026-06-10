@@ -20,6 +20,8 @@ ENV/
 # Environment variables (sensitive!)
 backend/.env
 .env
+.env.production
+backend/.env.production
 .env.local
 .env.*.local
 
@@ -47,6 +49,10 @@ lias.db
 Thumbs.db
 desktop.ini
 
+# Local development and report artifacts
+.codex-run-logs/
+database_screenshots/
+
 # Logs
 *.log
 npm-debug.log*
@@ -59,3 +65,6 @@ yarn-debug.log*
 # Build outputs
 /build
 /out
+
+# Local report documents
+/src/assets/*.pdf

@@ -19,7 +19,13 @@ def _get_axis_id_by_title(db, title: str) -> int:
     return axis.id
 
 
-def _upsert_user(db, email: str, full_name: str, role: models.UserRole) -> models.User:
+def _upsert_user(
+    db,
+    email: str,
+    full_name: str,
+    role: models.UserRole,
+    orcid_id: str | None = None,
+) -> models.User:
     user = db.scalar(select(models.User).where(models.User.email == email))
     if user is None:
         user = models.User(
@@ -30,6 +36,8 @@ def _upsert_user(db, email: str, full_name: str, role: models.UserRole) -> model
         )
         db.add(user)
         db.flush()
+    user.orcid_sub = orcid_id
+    user.orcid_name_locked = bool(orcid_id)
     return user
 
 
@@ -136,7 +144,7 @@ def run() -> None:
                 "biography": "Conçoit des architectures intelligentes pour l'aide à la décision.",
                 "interests": "agents, optimisation, IA explicable",
                 "axis_id": axis_data_id,
-                "orcid": "0000-0003-1122-3344",
+                "orcid": "0000-0001-5109-3700",
             },
             {
                 "email": "leila.tazi@lias.fsb.ac.ma",
@@ -147,7 +155,7 @@ def run() -> None:
                 "biography": "Travaille sur les stratégies robustes pour les systèmes non linéaires.",
                 "interests": "commande robuste, diagnostic, systèmes dynamiques",
                 "axis_id": axis_auto_id,
-                "orcid": "0000-0002-4455-6677",
+                "orcid": "0000-0002-1694-233X",
             },
             {
                 "email": "yassine.ouahbi@lias.fsb.ac.ma",
@@ -201,6 +209,7 @@ def run() -> None:
                 email=member_data["email"],
                 full_name=member_data["full_name"],
                 role=models.UserRole.MEMBER,
+                orcid_id=member_data["orcid"],
             )
             _upsert_profile(
                 db,
