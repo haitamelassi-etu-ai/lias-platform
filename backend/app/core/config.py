@@ -37,7 +37,11 @@ class Settings:
         self.password_reset_expire_minutes = int(
             os.getenv("LIAS_PASSWORD_RESET_EXPIRE_MINUTES", "30")
         )
-        self.database_url = os.getenv("LIAS_DATABASE_URL", "sqlite:///./lias.db")
+        self.database_url = (
+            os.getenv("LIAS_DATABASE_URL")
+            or os.getenv("DATABASE_URL")
+            or "sqlite:///./lias.db"
+        )
         self.docs_enabled = self._bool_env(
             "LIAS_DOCS_ENABLED", default=self.env != "production"
         )
